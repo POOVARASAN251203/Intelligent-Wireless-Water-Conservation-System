@@ -1,0 +1,86 @@
+#include <ESP8266WiFi.h>
+
+const char* ssid = "Your_SSID";
+const char* password = "*****";
+
+WiFiServer server(80);
+
+const int trigPin = D1;
+const int echoPin = D2;
+const int ledPin = D3;
+
+/*IPAddress local_IP(192, 168, 20, 183);
+IPAddress gateway(192, 168, 1, 1);
+
+IPAddress subnet(255, 255, 0, 0);
+IPAddress primaryDNS(8, 8, 8, 8); 
+IPAddress secondaryDNS(8, 8, 4, 4); */
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, HIGH);
+  delay(1000);
+
+  /*if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) 
+  {
+    Serial.println("STA Failed to configure");
+  }*/
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("Connected to Wi-Fi");
+  digitalWrite(ledPin, LOW);
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  // Start the server
+  server.begin();
+  Serial.println("Server started");
+}
+
+void loop() {
+  // Wait for a client to connect
+  WiFiClient client = server.available();
+  if (!client) {
+    return;
+  }
+
+  // Wait for client request
+  while (!client.available()) {
+    delay(1);
+  }
+
+  // Process the client request
+  String request = client.readStringUntil('\r');
+  Serial.println(request);
+  client.flush();
+
+  // Get the distance
+  int duration, distance;
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  duration = pulseIn(echoPin, HIGH);
+  distance = duration * 0.034 / 2;
+
+  // Send the response
+  String response = "HTTP/1.1 200 OK\r\n";
+  response += "Content-Type: text/plain\r\n";
+  response += "Access-Control-Allow-Origin: *\r\n";
+  response += "\r\n";
+  response += "Distance: " + String(distance) + " cm\r\n";
+  client.print(response);
+  delay(10);
+  
+  // Disconnect from the client
+  client.stop();
+}

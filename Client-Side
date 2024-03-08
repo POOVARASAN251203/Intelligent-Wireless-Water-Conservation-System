@@ -1,0 +1,159 @@
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+#define BLYNK_TEMPLATE_ID "Your_Blynk_ID"
+#define BLYNK_TEMPLATE_NAME "Intelligent Water Management"
+#define BLYNK_AUTH_TOKEN "Your_Blynk_Auth_Token"
+
+const char* ssid = "Your ID"; //Connect to Same Wi-Fi
+const char* password = "*******";
+
+char auth[] = BLYNK_AUTH_TOKEN;
+const int ledPin = D3;
+//const int ledBlue = D2;
+const int FloatSt = D2;
+int FloatSbt = 1;
+
+int f=0;
+IPAddress serverIP( 192, 168, 88, 172); // Replace with your IP
+
+void setup() {
+
+  pinMode(ledPin, OUTPUT);
+ // pinMode(ledBlue, OUTPUT);
+  pinMode(FloatSt, INPUT_PULLUP);
+  //digitalWrite(ledBlue, HIGH);
+
+  Serial.begin(115200);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("Connected to Wi-Fi");
+  Serial.println("Requesting distance from server...");
+
+  Serial.println("\nWaiting for NodeMCU - Blynk App Connection...");
+  Blynk.begin(auth, ssid, password); 
+  //Blynk.connect();
+  Serial.println("\n Blynk Connected");
+  while (!Serial) continue;
+}
+
+
+void loop() {
+  Blynk.run();  
+  FloatSbt = digitalRead(FloatSt);
+  WiFiClient client;
+  int retries = 0;
+
+  while (!client.connect(serverIP, 80) && retries < 5) {
+    retries++;
+    Serial.print("Retrying connection... ");
+    delay(500);
+  }
+
+  if (client.connected()) {
+    client.println("Change in Water Level");
+    client.print("Host: ");
+    client.println(serverIP);
+    client.println("Connection: close");
+    client.println();
+
+    bool response_received = false;
+    while (client.connected() || client.available()) {
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        if (line.indexOf("HTTP/1.1") != -1) {
+          if (line.indexOf("200") == -1) {
+            Serial.println("Server error");
+          }
+        }
+        if (line.indexOf("Distance: ") != -1) {
+          int distance = line.substring(line.indexOf("Distance: ") + 10).toInt();
+         
+        
+        if(FloatSbt == HIGH){
+          // digitalWrite(ledBlue, LOW);
+        if (distance <= 4) {
+          
+          digitalWrite(ledPin, LOW);
+          Serial.print("Distance: ");
+          Serial.print(distance);
+          Serial.println(" cm");
+          Serial.println("Tank is Full,  Motor is turned OFF");
+
+          Blynk.virtualWrite(V4, distance);
+          Blynk.virtualWrite(V3,"Tank is Full,  Motor is turned OFF");
+          response_received = true;
+          f=0;
+        }
+
+        else if (distance > 13) {
+          
+          digitalWrite(ledPin, HIGH);
+          Serial.print("Distance: ");
+          Serial.print(distance);
+          Serial.println(" cm");
+          Serial.println("Water level reached the bottom, Motor is turned ON");
+
+          Blynk.virtualWrite(V4, distance);
+          Blynk.virtualWrite(V3,"Water level reached the bottom, Motor is turned ON");
+          response_received = true;
+          f=1;
+        }
+
+        if (f==1) {
+          if (distance <= 13 && distance > 4) {
+            digitalWrite(ledPin, HIGH);
+            Serial.print("Distance: ");
+            Serial.print(distance);
+            Serial.println(" cm");
+            Serial.println("Tank is Filling");
+
+            Blynk.virtualWrite(V4, distance);
+            Blynk.virtualWrite(V3,"Tank is Filling");
+            response_received = true;
+          }
+        } 
+        if (f==0) {
+          if (distance <= 20 && distance > 10) {
+            digitalWrite(ledPin, LOW);
+            Serial.print("Distance: ");
+            Serial.print(distance);
+            Serial.println(" cm");
+            Serial.println("Water level drops down"); 
+
+            Blynk.virtualWrite(V4, distance);
+            Blynk.virtualWrite(V3,"Water level drops down");      
+            response_received = true;
+          }
+        }
+
+}// Float Switch
+        else
+        {
+          Serial.print("No Sufficient Water - Cannot run motor");
+          Blynk.virtualWrite(V3,"No Sufficient Water - Cannot run motor");
+          Blynk.virtualWrite(V4, 0);
+          Serial.print(" ");
+   //     digitalWrite(ledBlue, HIGH);
+          digitalWrite(ledPin, LOW);
+        }
+      } //line.indexOf
+
+}
+    }
+    if (!response_received) {
+      Serial.println("No response received from server");
+    }
+
+  } else {
+    Serial.println("Failed to connect to server");
+  }
+
+  delay(1000);
+}
